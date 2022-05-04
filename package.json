@@ -1,0 +1,19 @@
+{
+  "name": "nti-meets-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "test",
+    "start": "node App.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "nti-meets-backend"
+  },
+  "author": "m4tex",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.3"
+  }
+}
