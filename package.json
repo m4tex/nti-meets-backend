@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "test",
-    "start": "node App.js"
+    "start": "nodemon App.js"
   },
   "repository": {
     "type": "git",
@@ -14,6 +14,10 @@
   "author": "m4tex",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.17.3"
+    "bcrypt": "^5.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.17.3",
+    "helmet": "^5.0.2",
+    "mongoose": "^6.3.2"
   }
 }
