@@ -1,4 +1,5 @@
 //#region imports
+const mongooseLeanId = require('mongoose-lean-id');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose')
@@ -19,56 +20,63 @@ const accountDataSchema = new mongoose.Schema({
     favorites: { type: [String], required: true },
     admin: { type: Boolean, required: true },
 });
-
 const articleSchema = new mongoose.Schema({
     title: { type: String, required: true },
     author: { type: String, required: true },
     date: { type: Date, required: true },
     content: { type: String, required: true },
     html: { type: Boolean, required: true },
+    description: {type: String, required: true},
 });
+
+accountDataSchema.plugin(mongooseLeanId);
+articleSchema.plugin(mongooseLeanId);
+
+const Account = new mongoose.model('Account', accountDataSchema);
+const Article = new mongoose.model('Article', articleSchema);
+
 //#endregion
 
 //#region express inintialization
 const app = express();
 
-const Account = new mongoose.model('Account', accountDataSchema);
-const Article = new mongoose.model('Article', articleSchema);
-
-function userAuthMiddleware(req, res, next) {
-    if (typeof req.session.userId === 'string' && Account.exists({id: req.session.userId})){
+async function userAuthMiddleware(req, res, next) {
+    if (req.session.hasOwnProperty('userId')){
         next();
     }
     else {
-        res.sendStatus(401);
+        res.send({"auth" : false});
     }
 }
 
 async function adminAuthMiddleware(req, res, next) {
     if(typeof req.session.userId !== 'string'){
+        res.end();
         return;
     }
 
-    const acc = await Account.findOne({id: req.session.userId});
+    const acc = await Account.findOne({id: req.session.userId}).lean();
     if (acc && acc.admin){
         console.log('Authorizing admin activity');
         next();
     }
     else {
-        res.sendStatus(401);
+        res.send({"auth" : false});
     }
 }
 
-app.set('trust proxy', 1);
 app.use(session({
     secret: 'myverysecretkeylol10239102390102391902',
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: true },
+    saveUninitialized: false,
+    cookie: { maxAge: 1000 * 60 * 60 * 24 * 30,  },
     store: MongoStore.create({ mongoUrl: 'mongodb://localhost:27017/nti-meets' }),
 }));
 app.use(express.json());
-app.use(cors({origin: "http://localhost:3000"}))
+app.use(cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+}));
 app.use(helmet());
 
 app.listen(8000, () => {
@@ -86,14 +94,16 @@ app.post('/api/v1/logga-in', async function (req, res) {
         return;
     }
 
-    const { rawUN, rawPWD } = req.body;
+    const { username: rawUN, password: rawPWD } = req.body;
     const username = rawUN.trim(), password = rawPWD.trim();
 
-    const acc = await Account.findOne({username: username});
+    const acc = await Account.findOne({username: username}).lean();
     if (acc && acc.password === password) {
-        req.session.username = username;
+        req.session.userId = acc.id;
+        req.session.username = acc.username;
+        req.session.admin = acc.admin;
         res.status(201);
-        res.send({"admin" : acc.admin});
+        res.send({"admin" : acc.admin, "username" : acc.username});
     } else {
         res.send({"err" : "Fel användarnamn eller lösenord"});
     }
@@ -106,12 +116,12 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
         return;
     }
 
-    const { rawUN, rawEmail, rawPWD } = req.body;
+    const { username: rawUN, email: rawEmail, password: rawPWD } = req.body;
     const username = rawUN.trim(), email = rawEmail.trim(), password = rawPWD.trim();
 
-    if (Account.exists({username: username})) {
+    if (await Account.exists({username: username})) {
         res.send({"err" : "Det finns ett konto med det namnet"});
-    } else if(Account.exists({email: email})){
+    } else if(await Account.exists({email: email})){
         res.send({"err" : "Det finns ett konto med angiven mejladress, vill du logga in istället?"});
     } else {
         Account.create({
@@ -122,7 +132,10 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
             admin: false,
         }).then((acc) => {
             req.session.userId = acc.id;
-            res.sendStatus(201);
+            req.session.username = acc.username;
+            req.session.admin = false;
+            res.status(201);
+            res.send({"username" : acc.username});
         });
     }
 });
@@ -130,25 +143,48 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
 //No validation here because the authenticationMiddleware does that for us...
 app.post('/api/v1/sso', userAuthMiddleware, function (req, res) {
     res.status(201);
-    res.send({"admin" : req.session.admin});
+    res.send({"admin" : req.session});
+});
+
+app.post('/api/v1/logout', userAuthMiddleware,function(req, res) {
+    req.session.destroy(function (err) {
+        console.log(err);
+    });
 });
 //#endregion
 
 //#region article endpoints
 
-app.get('/api/v1/articles', userAuthMiddleware, function (){
+app.get('/api/v1/articles', userAuthMiddleware, function () {
 
 });
 
-app.get('/api/v1/articles/:id', userAuthMiddleware, function (){
+app.get('/api/v1/articles/:id', userAuthMiddleware, function () {
 
 });
 
-//Creates an article
-app.post('/api/v1/articles', adminAuthMiddleware, function (){
-    console.log('creating article...');
+app.post('/api/v1/articles', adminAuthMiddleware, function (req, res) {
+    Article.create({
+        html: req.body.html,
+        title: req.body.title,
+        author: req.session.userId,
+        content: req.body.content,
+        date: new Date(req.body.date),
+        description: stripDescription(req.body.html, req.body.content),
+    }).then(art => res.send()).catch(err => {
+        res.send({"err" : err});
+        console.log(err);
+    });
 });
 
+function stripDescription(html, content) {
+    if(!html){
+        return content;
+    }
+    else {
+        content.replace(/<\/?[^>]+(>|$)/g, " ");
+    }
+}
 
 app.patch('/api/v1/articles/:id', adminAuthMiddleware, function () {
 
@@ -158,4 +194,23 @@ app.delete('/api/v1/articles/:id', adminAuthMiddleware, function() {
 
 });
 
+//#endregion
+
+//#region other endpoints...
+//Used to display author's username on articles
+app.get('/api/v1/user/:id', userAuthMiddleware, async function(req, res) {
+    console.log(req.params.id);
+    const acc = await Account.findOne({id:req.params.id}).lean();
+    if (acc){
+        res.send({"username" : acc.username});
+    }
+    else {
+        res.send({"username" : "Borttagen"});
+    }
+});
+
+// //This one sends back the user's nickname
+// app.get('/api/v1/user', userAuthMiddleware, function (req, res) {
+//    res.send({"username" : req.session.username});
+// });
 //#endregion
