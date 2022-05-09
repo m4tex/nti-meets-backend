@@ -23,7 +23,7 @@ const accountDataSchema = new mongoose.Schema({
 const articleSchema = new mongoose.Schema({
     title: { type: String, required: true },
     author: { type: String, required: true },
-    date: { type: Date, required: true },
+    date: { type: String, required: true },
     content: { type: String, required: true },
     html: { type: Boolean, required: true },
     description: {type: String, required: true},
@@ -40,7 +40,7 @@ const Article = new mongoose.model('Article', articleSchema);
 //#region express inintialization
 const app = express();
 
-async function userAuthMiddleware(req, res, next) {
+function userAuthMiddleware(req, res, next) {
     if (req.session.hasOwnProperty('userId')){
         next();
     }
@@ -65,6 +65,7 @@ async function adminAuthMiddleware(req, res, next) {
     }
 }
 
+app.set('trust proxy', 1);
 app.use(session({
     secret: 'myverysecretkeylol10239102390102391902',
     resave: false,
@@ -135,6 +136,7 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
             req.session.username = acc.username;
             req.session.admin = false;
             res.status(201);
+            console.log(req.sessionID);
             res.send({"username" : acc.username});
         });
     }
@@ -147,20 +149,33 @@ app.post('/api/v1/sso', userAuthMiddleware, function (req, res) {
 });
 
 app.post('/api/v1/logout', userAuthMiddleware,function(req, res) {
-    req.session.destroy(function (err) {
-        console.log(err);
+    req.session.destroy(function(err) {
+        if(err){
+            res.send({"err" : err});
+            console.log(err);
+        }
+        else {
+            res.send();
+        }
     });
 });
 //#endregion
 
 //#region article endpoints
 
-app.get('/api/v1/articles', userAuthMiddleware, function () {
-
+app.get('/api/v1/articles', userAuthMiddleware, function (req, res) {
+    Article.find().lean().then(articles => {
+        res.send({"articles" : articles});
+    }).catch(err => {
+        console.log(err);
+        res.send({"err": err});
+    });
 });
 
-app.get('/api/v1/articles/:id', userAuthMiddleware, function () {
-
+app.get('/api/v1/articles/:id', userAuthMiddleware, function (req, res) {
+    Article.findOne({ id: req.params.id }).lean().
+    then(art => res.send({"article" : art})).
+    catch(err => res.send({"err": err}));
 });
 
 app.post('/api/v1/articles', adminAuthMiddleware, function (req, res) {
@@ -169,7 +184,7 @@ app.post('/api/v1/articles', adminAuthMiddleware, function (req, res) {
         title: req.body.title,
         author: req.session.userId,
         content: req.body.content,
-        date: new Date(req.body.date),
+        date: req.body.date,
         description: stripDescription(req.body.html, req.body.content),
     }).then(art => res.send()).catch(err => {
         res.send({"err" : err});
@@ -199,7 +214,6 @@ app.delete('/api/v1/articles/:id', adminAuthMiddleware, function() {
 //#region other endpoints...
 //Used to display author's username on articles
 app.get('/api/v1/user/:id', userAuthMiddleware, async function(req, res) {
-    console.log(req.params.id);
     const acc = await Account.findOne({id:req.params.id}).lean();
     if (acc){
         res.send({"username" : acc.username});
