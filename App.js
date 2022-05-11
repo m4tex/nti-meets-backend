@@ -55,7 +55,7 @@ async function adminAuthMiddleware(req, res, next) {
         return;
     }
 
-    const acc = await Account.findOne({id: req.session.userId}).lean();
+    const acc = await Account.findById(req.session.userId).lean();
     if (acc && acc.admin){
         console.log('Authorizing admin activity');
         next();
@@ -103,8 +103,9 @@ app.post('/api/v1/logga-in', async function (req, res) {
         req.session.userId = acc.id;
         req.session.username = acc.username;
         req.session.admin = acc.admin;
+        req.session.favorites = acc.favorites;
         res.status(201);
-        res.send({"admin" : acc.admin, "username" : acc.username});
+        res.send({"admin" : acc.admin, "username" : acc.username, "favorites" : acc.favorites});
     } else {
         res.send({"err" : "Fel användarnamn eller lösenord"});
     }
@@ -135,6 +136,7 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
             req.session.userId = acc.id;
             req.session.username = acc.username;
             req.session.admin = false;
+            req.session.favorites = [];
             res.status(201);
             console.log(req.sessionID);
             res.send({"username" : acc.username});
@@ -145,7 +147,8 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
 //No validation here because the authenticationMiddleware does that for us...
 app.post('/api/v1/sso', userAuthMiddleware, function (req, res) {
     res.status(201);
-    res.send({"admin" : req.session});
+    res.send({"admin" : req.session.admin, "username" : req.session.username, "favorites": req.session.favorites });
+    console.log(req.session);
 });
 
 app.post('/api/v1/logout', userAuthMiddleware,function(req, res) {
@@ -173,7 +176,7 @@ app.get('/api/v1/articles', userAuthMiddleware, function (req, res) {
 });
 
 app.get('/api/v1/articles/:id', userAuthMiddleware, function (req, res) {
-    Article.findOne({ id: req.params.id }).lean().
+    Article.findById(req.params.id).lean().
     then(art => res.send({"article" : art})).
     catch(err => res.send({"err": err}));
 });
@@ -197,16 +200,19 @@ function stripDescription(html, content) {
         return content;
     }
     else {
+        //Look at this majestic regex expression, truly fascinating.
         content.replace(/<\/?[^>]+(>|$)/g, " ");
     }
 }
 
-app.patch('/api/v1/articles/:id', adminAuthMiddleware, function () {
-
+app.patch('/api/v1/articles/:id', adminAuthMiddleware, function (req, res) {
+    Article.updateOne({ _id: req.params.id }, req.body.article).
+    then(res.send()).catch(err => res.send({"err" : err}));
 });
 
-app.delete('/api/v1/articles/:id', adminAuthMiddleware, function() {
-
+app.delete('/api/v1/articles/:id', adminAuthMiddleware, function(req, res) {
+    Article.deleteOne({ _id: req.params.id}).
+    then(res.send()).catch(err => res.send({"err" : err}));
 });
 
 //#endregion
@@ -223,6 +229,20 @@ app.get('/api/v1/user/:id', userAuthMiddleware, async function(req, res) {
     }
 });
 
+app.get('/api/v1/favorites', userAuthMiddleware, function(req, res) {
+    Account.findById(req.session.userId).lean().
+    then(acc => res.send({"favorites" : acc.favorites})).
+    catch(err => res.send({"err" : err}));
+});
+
+app.post('/api/v1/favorites', userAuthMiddleware, function(req, res) {
+    Account.updateOne({ _id: req.session.userId }, { $push : { favorites: req.body.favorite }}).
+    then(() => {
+        req.session.favorites.push(req.body.favorite);
+        res.send();
+    }).
+    catch(err => send({"err" : err}));
+})
 // //This one sends back the user's nickname
 // app.get('/api/v1/user', userAuthMiddleware, function (req, res) {
 //    res.send({"username" : req.session.username});
