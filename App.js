@@ -91,7 +91,10 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/v1/logga-in', async function (req, res) {
-    if(typeof req.body.username !== 'string' || typeof req.body.username !== 'string'){
+    if(typeof req.body.username !== 'string' ||
+        typeof req.body.username !== 'string' ||
+        req.body.username.length > 20 ||
+        req.body.password.length > 20){
         return;
     }
 
@@ -114,7 +117,10 @@ app.post('/api/v1/logga-in', async function (req, res) {
 app.post('/api/v1/skapa-konto', async function (req, res) {
     if(typeof req.body.username !== 'string' ||
         typeof req.body.username !== 'string' ||
-        typeof  req.body.email !== 'string'){
+        typeof  req.body.email !== 'string' ||
+        req.body.username.length > 20 ||
+        req.body.password.length > 20 ||
+        req.body.email.length > 30 ){
         return;
     }
 
@@ -124,7 +130,7 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
     if (await Account.exists({username: username})) {
         res.send({"err" : "Det finns ett konto med det namnet"});
     } else if(await Account.exists({email: email})){
-        res.send({"err" : "Det finns ett konto med angiven mejladress, vill du logga in istället?"});
+        res.send({"err" : "Det finns ett konto med det mejlet, vill du logga in istället?"});
     } else {
         Account.create({
             username: username,
