@@ -144,7 +144,6 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
             req.session.admin = false;
             req.session.favorites = [];
             res.status(201);
-            console.log(req.sessionID);
             res.send({"username" : acc.username});
         });
     }
@@ -154,7 +153,6 @@ app.post('/api/v1/skapa-konto', async function (req, res) {
 app.post('/api/v1/sso', userAuthMiddleware, function (req, res) {
     res.status(201);
     res.send({"admin" : req.session.admin, "username" : req.session.username, "favorites": req.session.favorites });
-    console.log(req.session);
 });
 
 app.post('/api/v1/logout', userAuthMiddleware,function(req, res) {
@@ -212,7 +210,7 @@ function stripDescription(html, content) {
 }
 
 app.patch('/api/v1/articles/:id', adminAuthMiddleware, function (req, res) {
-    Article.updateOne({ _id: req.params.id }, req.body.article).
+    Article.replaceOne({ _id: req.params.id }, req.body.article).
     then(res.send()).catch(err => res.send({"err" : err}));
 });
 
@@ -248,6 +246,15 @@ app.post('/api/v1/favorites', userAuthMiddleware, function(req, res) {
         res.send();
     }).
     catch(err => send({"err" : err}));
+});
+
+app.delete('/api/v1/favorites/:id', userAuthMiddleware, function (req, res) {
+    Account.updateOne({ _id: req.session.userId }, { $pull : { favorites: req.params.id } }).
+    then(() => {
+        req.session.favorites.splice(req.session.favorites.indexOf(req.params.id), 1);
+        res.send();
+    }).
+    catch(err => res.send({"err": err}));
 })
 // //This one sends back the user's nickname
 // app.get('/api/v1/user', userAuthMiddleware, function (req, res) {
