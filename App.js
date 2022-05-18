@@ -204,24 +204,26 @@ function stripDescription(html, content) {
         return content;
     }
     else {
-        //Look at this majestic regex expression, truly fascinating. Too bad it isn't working.
+        //Look at this majestic regex expression, truly fascinating. Too bad it isn't working, nvm it works now.
         return content.replace(/(<([^>]+)>)/gi, " ");
     }
 }
 
 app.patch('/api/v1/articles/:id', adminAuthMiddleware, function (req, res) {
-    Article.replaceOne({ _id: req.params.id }, req.body.article).
-    then(res.send()).catch(err => res.send({"err" : err}));
+    console.log(req.body);
+    Article.updateOne({ _id: req.params.id }, {
+        ...req.body,
+        description: stripDescription(req.html, req.content),
+    }).then(() => res.send()).catch(err => res.send({"err" : err}));
 });
 
 app.delete('/api/v1/articles/:id', adminAuthMiddleware, function(req, res) {
-    Article.deleteOne({ _id: req.params.id}).
-    then(res.send()).catch(err => res.send({"err" : err}));
+    Article.deleteOne({ _id: req.params.id}).then(() => res.send()).catch(err => res.send({"err" : err}));
 });
 
 //#endregion
 
-//#region other endpoints...
+//#region other endpoints
 //Used to display author's username on articles
 app.get('/api/v1/user/:id', userAuthMiddleware, async function(req, res) {
     const acc = await Account.findOne({id:req.params.id}).lean();
