@@ -204,8 +204,8 @@ function stripDescription(html, content) {
         return content;
     }
     else {
-        //Look at this majestic regex expression, truly fascinating.
-        content.replace(/<\/?[^>]+(>|$)/g, " ");
+        //Look at this majestic regex expression, truly fascinating. Too bad it isn't working.
+        return content.replace(/(<([^>]+)>)/gi, " ");
     }
 }
 
